@@ -22,8 +22,8 @@ pip install -e .
 
 p2p sync is controlled by a config file, which needs to be created:
 
-* Windows Config File: `%AppData%\backup_sync\config.json`
-* Linux Config File: `~/.backup_sync/config.json`
+* Windows Config File: `%AppData%\p2p_sync\config.json`
+* Linux Config File: `~/.p2p_sync/config.json`
 
 The content of the file should be the following:
 

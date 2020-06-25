@@ -15,6 +15,10 @@ from watchdog.events import FileSystemEventHandler, DirCreatedEvent, DirDeletedE
 
 
 # Cell: 1
+_EXCLUDE_PATTERNS = [".ipynb_checkpoints/", ".~", "__pycache__/"]
+
+
+# Cell: 2
 import hashlib
 def compute_md5(fname):
     hash_md5 = hashlib.md5()
@@ -24,7 +28,7 @@ def compute_md5(fname):
     return hash_md5.hexdigest()
 
 
-# Cell: 2
+# Cell: 3
 # Save the transaction database
 def save_transactions(database_file: str, database: Dict):
     data = json.dumps(database)
@@ -32,28 +36,27 @@ def save_transactions(database_file: str, database: Dict):
         f.write(data)
 
 
-# Cell: 3
+# Cell: 4
 # Load the transaction database
 def load_transactions(database_file) -> Dict:
     if not os.path.exists(database_file):
         print("No database found, creating a new one.")
         database = {}
-        save_transaction_database(database_file, database)
+        save_transactions(database_file, database)
 
     with open(database_file, "r") as f:
         database = json.loads(f.read())
-    print("Database successfully loaded. {} transactions, {} lru_filenames".format(len(database["transactions"]), len(database["lru_filenames"])))
     return database
 
 
-# Cell: 4
+# Cell: 5
 class FileChangeHandler(FileSystemEventHandler):
     exclude_patterns = []
     mappings = {}
     database_path = "database.json"
     
     def get_sync_name(self, fname):
-        for namespace, path in mappings.items():
+        for namespace, path in self.mappings.items():
             if not path.endswith("/"):
                 path += "/"
             if fname.startswith(path):
@@ -66,22 +69,29 @@ class FileChangeHandler(FileSystemEventHandler):
         event.src_path
             path/to/observed/file
         """
-        if self.is_excluded(event):
-            return
+        if event.src_path.endswith("Neues Textdokument.txt"):
+            self.on_created(FileCreatedEvent(event.dest_path))
+        else:
+            if not isinstance(event, DirMovedEvent):
+                self.on_deleted(FileDeletedEvent(event.src_path))
+                self.on_created(FileCreatedEvent(event.dest_path))
         
-        fname = self.get_sync_name(event.src_path)
-        fname_moved = self.get_sync_name(event.dest_path)
+        #if self.is_excluded(event):
+        #    return
+        #
+        #fname = self.get_sync_name(event.src_path)
+        #fname_moved = self.get_sync_name(event.dest_path)
+        #
+        #transactions = load_transactions(self.database_path)
+        #transaction = {"timestamp": time.time(), "type": "moved", "new_location": fname_moved}
+        #transactions[fname] = transaction
+        #transaction = {"timestamp": time.time(), "type": "moved", "old_location": fname, "md5": compute_md5(event.dest_path)}
+        #transactions[fname] = transaction
+        #save_transactions(self.database_path, transactions)
         
-        transactions = load_transactions(self.database_path)
-        transaction = {"timestamp": time.time(), "type": "moved", "new_location": fname_moved}
-        transactions[fname] = transaction
-        transaction = {"timestamp": time.time(), "type": "moved", "old_location": fname, "md5": compute_md5(event.dest_path)}
-        transactions[fname] = transaction
-        save_transactions(self.database_path, transactions)
-        
-        if len(fname) > 128:
-            fname = fname[:63] + "..." + fname[-62:]            
-        print("\rMoved: {:<128} (len queue: {})".format(fname, len(transactions)), end="")
+        #if len(fname) > 128:
+        #    fname = fname[:63] + "..." + fname[-62:]            
+        #print("\rMoved: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
 
     def on_created(self, event):
@@ -99,7 +109,7 @@ class FileChangeHandler(FileSystemEventHandler):
         
         if len(fname) > 128:
             fname = fname[:63] + "..." + fname[-62:]            
-        print("\rCreated: {:<128} (len queue: {})".format(fname, len(transactions)), end="")
+        print("\rCreated: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def on_deleted(self, event):
         if self.is_excluded(event):
@@ -114,7 +124,7 @@ class FileChangeHandler(FileSystemEventHandler):
         
         if len(fname) > 128:
             fname = fname[:63] + "..." + fname[-62:]
-        print("\rDeleted: {:<128} (len queue: {})".format(fname, len(transactions)), end="")
+        print("\rDeleted: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def on_modified(self, event):
         if event.is_directory:
@@ -130,7 +140,7 @@ class FileChangeHandler(FileSystemEventHandler):
         
         if len(fname) > 128:
             fname = fname[:63] + "..." + fname[-62:]
-        print("\rModified: {:<128} (len queue: {})".format(fname, len(transactions)), end="")
+        print("\rModified: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def is_excluded(self, event):
         if event.src_path.endswith("Neues Textdokument.txt"):
@@ -154,7 +164,7 @@ class FileChangeHandler(FileSystemEventHandler):
         return False
 
 
-# Cell: 5
+# Cell: 6
 def initial_scan(handler):
     tracked_files = []
     paths = list(handler.mappings.values())
@@ -162,17 +172,17 @@ def initial_scan(handler):
     # check filelist for deletions or modifications
     print("\n\rScanning Tracked Files")
     transactions = load_transactions(handler.database_path)
-    for fname, v in transactions:
+    for fname, v in transactions.items():
         namespace, name = fname.split(":")
         disk_name = os.path.join(handler.mappings[namespace], name)
         if len(fname) > 128:
             fname = fname[:63] + "..." + fname[-62:]
-        print("\rScanning: {:<128} (len queue: {})".format(fname, len(_transaction_send_queue)), end="")
+        print("\rScanning: {:<128} (len queue: {})".format(fname, len(transactions)), end="")
         
         if os.path.exists(disk_name):
-            tracked_files.append(t.local_fname)
+            tracked_files.append(disk_name)
             if compute_md5(disk_name) != v["md5"]:
-                handler.on_modified(FileModifiedEvent(t.local_fname))
+                handler.on_modified(FileModifiedEvent(disk_name))
         elif not v["type"] == "deleted":
             handler.on_deleted(FileDeletedEvent(disk_name))
     print("\n\rScanning Completed")
@@ -188,7 +198,7 @@ def initial_scan(handler):
         print("\n\rScanning Completed")
 
 
-# Cell: 6
+# Cell: 7
 def on_retrieve_file(state, entanglement, data: Dict):
     print("on_retrieve_file: {}".format(data))
     namespace, name = data["fname"].split(":")
@@ -263,21 +273,21 @@ def on_entangle(entanglement):
         time.sleep(5)
 
 
-# Cell: 7
+# Cell: 8
 def run_sync():
     # Load user_data
     if "AppData" in os.environ: # Windows
-        folders_config_file = os.path.join(os.environ["AppData"], "backup_sync", "user.json")
-        syncignore_path = os.path.join(os.environ["AppData"], "backup_sync", ".syncignore")
-        database_path = os.path.join(os.environ["AppData"], "backup_sync", "database.json")
+        config_file = os.path.join(os.environ["AppData"], "p2p_sync", "config.json")
+        syncignore_path = os.path.join(os.environ["AppData"], "p2p_sync", ".syncignore")
+        database_path = os.path.join(os.environ["AppData"], "p2p_sync", "database.json")
     else: # Linux
-        folders_config_file = os.path.join("/home", os.environ["USER"], ".backup_sync", "user.json")
-        syncignore_path = os.path.join("/home", os.environ["USER"], ".backup_sync", ".syncignore")
-        database_path = os.path.join("/home", os.environ["USER"], ".backup_sync", "database.json")
-    if not os.path.exists(os.path.join(folders_config_file)):
-        raise RuntimeError("Config for sync user does not exist: {}".format(folders_config_file))
-    with open(folders_config_file, "r") as f:
-        user_data = json.loads(f.read())
+        config_file = os.path.join("/home", os.environ["USER"], ".p2p_sync", "config.json")
+        syncignore_path = os.path.join("/home", os.environ["USER"], ".p2p_sync", ".syncignore")
+        database_path = os.path.join("/home", os.environ["USER"], ".p2p_sync", "database.json")
+    if not os.path.exists(config_file):
+        raise RuntimeError("Config does not exist: {}".format(config_file))
+    with open(config_file, "r") as f:
+        config = json.loads(f.read())
 
     # Load exclude patterns
     exclude_patterns=_EXCLUDE_PATTERNS
@@ -291,25 +301,25 @@ def run_sync():
     handler = FileChangeHandler()
     handler.exclude_patterns = exclude_patterns
     handler.database_path = database_path
-    handler.mappings = user_data["sync_to_local_folder"]
+    handler.mappings = config["sync_to_local_folder"]
     initial_scan(handler)
-    for path in paths.values():
+    for path in handler.mappings.values():
         observer.schedule(handler, path=path, recursive=True)
     observer.start()
 
     print("Connecting...")
     # 1. Try connecting to all known hosts
     clients = []
-    for hosts in user_data["known_hosts"]:
+    for hosts in config["known_hosts"]:
         clients.append(Client(host=hosts["host"], port=hosts["port"], password=hosts["password"], user=hosts["user"], callback=on_entangle, blocking=False))
     # 2. Start own server
-    listen(host=user_data["host"], port=user_data["port"], callback=on_entangle, users=user_data["users"])
+    listen(host=config["host"], port=config["port"], callback=on_entangle, users=config["users"])
     
     observer.stop()
 
     observer.join()
 
 
-# Cell: 8
+# Cell: 9
 if __name__ == "__main__":
     run_sync()
