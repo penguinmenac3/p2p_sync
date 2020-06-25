@@ -1,1 +1,3 @@
 git+https://github.com/penguinmenac3/entangle-python.git
+pyopenssl
+watchdog
