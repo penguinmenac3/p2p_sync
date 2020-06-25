@@ -8,14 +8,7 @@
 Make sure you have ssl and git installed.
 ```bash
 sudo apt -y install libssl-dev git
-```
-
-Clone and install editable.
-
-```bash
-git clone ...
-cd p2p_sync
-pip install -e .
+pip install git+https://github.com/penguinmenac3/p2p_sync.git
 ```
 
 ## Configuration
