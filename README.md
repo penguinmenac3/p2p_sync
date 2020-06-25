@@ -34,7 +34,7 @@ The content of the file should be the following:
     "users": {
         "myname": "some_password",
         "othername": "other_password"
-    }
+    },
     "known_hosts": [
         {
             "host": "other-pc",
