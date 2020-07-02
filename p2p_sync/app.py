@@ -244,9 +244,12 @@ def on_get_database(state, entanglement, transactions: Dict):
     transactions_local = load_transactions(state["handler"].database_path)
     
     for key in transactions:
+        namespace, name = key.split(":")
+        if namespace not in state["handler"].mappings:
+            continue
         if key not in transactions_local:
             entanglement.remote_fun("retrieve_file")(key)
-        else:
+        elif key in transactions:
             local_time = transactions_local[key]["timestamp"]
             remote_time = transactions[key]["timestamp"]
             if remote_time > local_time:
