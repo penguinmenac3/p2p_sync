@@ -217,9 +217,11 @@ def on_retrieve_file(state, entanglement, data: Dict):
     save_transactions(state["handler"].database_path, transactions)
     
     if not data["transaction"]["type"] == "deleted":
+        print("Writing: {}".format(disk_name))
         with open(disk_name, "wb") as f:
             f.write(base64.decodestring(data["data"].encode("ascii")))
     else:
+        print("Deleting: {}".format(disk_name))
         os.remove(disk_name)
 
     state["open_tasks"] -= 1
@@ -238,6 +240,7 @@ def retrieve_file(state, entanglement, fname):
     if not data["transaction"]["type"] == "deleted":
         with open(disk_name, "rb") as f:
             data["data"] = base64.encodestring(f.read()).decode("ascii")
+        print(data["data"])
     entanglement.remote_fun("on_retrieve_file")(data)
 
 def on_get_database(state, entanglement, transactions: Dict):
