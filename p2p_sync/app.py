@@ -216,13 +216,15 @@ def initial_scan(handler):
 def on_retrieve_file(state, entanglement, data: Dict):
     print("on_retrieve_file: {}".format(data))
     namespace, name = data["fname"].split(":")
-    disk_name = os.path.join(state["handler"].mappings[namespace], name)
+    disk_name = os.path.join(state["handler"].mappings[namespace], name).replace("/", os.sep)
     transactions = load_transactions(state["handler"].database_path)
     transactions[data["fname"]] = data["transaction"]
     save_transactions(state["handler"].database_path, transactions)
     
     if not data["transaction"]["type"] == "deleted":
         print("Writing: {}".format(disk_name))
+        if not os.path.exists(os.path.dirname(disk_name)):
+            os.makedirs(os.path.dirname(disk_name))
         with open(disk_name, "wb") as f:
             f.write(base64.decodestring(data["data"].encode("ascii")))
     else:
@@ -236,7 +238,7 @@ def retrieve_file(state, entanglement, fname):
     data = {}
     
     namespace, name = fname.split(":")
-    disk_name = os.path.join(state["handler"].mappings[namespace], name)
+    disk_name = os.path.join(state["handler"].mappings[namespace], name).replace("/", os.sep)
     
     transactions = load_transactions(state["handler"].database_path)
     data["transaction"] = transactions[fname]
