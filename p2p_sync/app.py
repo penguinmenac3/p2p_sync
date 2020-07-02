@@ -109,13 +109,15 @@ class FileChangeHandler(FileSystemEventHandler):
         print(fname)
         
         transactions = load_transactions(self.database_path)
-        transaction = {"timestamp": time.time(), "type": "created", "md5": compute_md5(raw_name)}
-        transactions[fname] = transaction
-        save_transactions(self.database_path, transactions)
+        md5 = compute_md5(raw_name)
+        if fname not in transactions or transactions[fname]["md5"] != md5:
+            transaction = {"timestamp": time.time(), "type": "created", "md5": md5}
+            transactions[fname] = transaction
+            save_transactions(self.database_path, transactions)
         
-        if len(fname) > 128:
-            fname = fname[:63] + "..." + fname[-62:]            
-        print("\rCreated: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
+            if len(fname) > 128:
+                fname = fname[:63] + "..." + fname[-62:]            
+            print("\rCreated: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def on_deleted(self, event):
         if self.is_excluded(event):
@@ -125,13 +127,14 @@ class FileChangeHandler(FileSystemEventHandler):
         fname = self.get_sync_name(raw_name)
         
         transactions = load_transactions(self.database_path)
-        transaction = {"timestamp": time.time(), "type": "deleted"}
-        transactions[fname] = transaction
-        save_transactions(self.database_path, transactions)
+        if fname not in transactions or transactions[fname]["type"] != "deleted":
+            transaction = {"timestamp": time.time(), "type": "deleted"}
+            transactions[fname] = transaction
+            save_transactions(self.database_path, transactions)
         
-        if len(fname) > 128:
-            fname = fname[:63] + "..." + fname[-62:]
-        print("\rDeleted: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
+            if len(fname) > 128:
+                fname = fname[:63] + "..." + fname[-62:]
+            print("\rDeleted: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def on_modified(self, event):
         if event.is_directory:
@@ -143,13 +146,15 @@ class FileChangeHandler(FileSystemEventHandler):
         fname = self.get_sync_name(raw_name)
         
         transactions = load_transactions(self.database_path)
-        transaction = {"timestamp": time.time(), "type": "modified", "md5": compute_md5(raw_name)}
-        transactions[fname] = transaction
-        save_transactions(self.database_path, transactions)
-        
-        if len(fname) > 128:
-            fname = fname[:63] + "..." + fname[-62:]
-        print("\rModified: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
+        md5 = compute_md5(raw_name)
+        if fname not in transactions or transactions[fname]["md5"] != md5:
+            transaction = {"timestamp": time.time(), "type": "modified", "md5": md5}
+            transactions[fname] = transaction
+            save_transactions(self.database_path, transactions)
+
+            if len(fname) > 128:
+                fname = fname[:63] + "..." + fname[-62:]
+            print("\rModified: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def is_excluded(self, event):
         raw_name = event.src_path.replace("\\", "/")
