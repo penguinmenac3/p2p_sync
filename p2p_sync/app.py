@@ -4,6 +4,7 @@
 import os
 import time
 import json
+import base64
 from typing import Dict, Any, List
 from functools import partial
 from entangle.entanglement import Entanglement
