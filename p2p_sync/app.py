@@ -227,7 +227,7 @@ def retrieve_file(state, entanglement, fname):
     print("retrieve_file: {}".format(fname))
     data = {}
     
-    namespace, name = data["fname"].split(":")
+    namespace, name = fname.split(":")
     disk_name = os.path.join(state["handler"].mappings[namespace], name)
     
     transactions = load_transactions(state["handler"].database_path)
