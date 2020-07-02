@@ -248,12 +248,14 @@ def on_get_database(state, entanglement, transactions: Dict):
         if namespace not in state["handler"].mappings:
             continue
         if key not in transactions_local:
-            entanglement.remote_fun("retrieve_file")(key)
+            state["open_tasks"] += 1
+            entanglement.remote_fun("sync_retrieve_file")(key)
         elif key in transactions:
             local_time = transactions_local[key]["timestamp"]
             remote_time = transactions[key]["timestamp"]
             if remote_time > local_time:
-                entanglement.remote_fun("retrieve_file")(key)
+                state["open_tasks"] += 1
+                entanglement.remote_fun("sync_retrieve_file")(key)
     # TODO compare database against local one
     # And request files that are more up to date by others
     # delete files that were deleted on remote.
@@ -284,6 +286,7 @@ def on_entangle(entanglement):
     entanglement.on_sync_retrieve_file = partial(on_retrieve_file, state, entanglement)
     entanglement.on_sync_get_database = partial(on_get_database, state, entanglement)
     entanglement.sync_get_database = partial(get_database, state, entanglement)
+    entanglement.sync_retrieve_file = partial(retrieve_file, state, entanglement)
     print("Waiting 5 seconds for readiness.")
     time.sleep(5)
     print("Connected. Syncing...")
