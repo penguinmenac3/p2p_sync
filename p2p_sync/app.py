@@ -16,6 +16,7 @@ from watchdog.events import FileSystemEventHandler, DirCreatedEvent, DirDeletedE
 
 # Cell: 1
 _EXCLUDE_PATTERNS = [".ipynb_checkpoints/", ".~", "__pycache__/"]
+_HANDLER = None
 
 
 # Cell: 2
@@ -69,17 +70,18 @@ class FileChangeHandler(FileSystemEventHandler):
         event.src_path
             path/to/observed/file
         """
+        raw_name = event.src_path.replace("\\", "/")
         if event.src_path.endswith("Neues Textdokument.txt"):
             self.on_created(FileCreatedEvent(event.dest_path))
         else:
             if not isinstance(event, DirMovedEvent):
-                self.on_deleted(FileDeletedEvent(event.src_path))
+                self.on_deleted(FileDeletedEvent(raw_name))
                 self.on_created(FileCreatedEvent(event.dest_path))
         
         #if self.is_excluded(event):
         #    return
         #
-        #fname = self.get_sync_name(event.src_path)
+        #fname = self.get_sync_name(raw_name)
         #fname_moved = self.get_sync_name(event.dest_path)
         #
         #transactions = load_transactions(self.database_path)
@@ -100,10 +102,13 @@ class FileChangeHandler(FileSystemEventHandler):
         if self.is_excluded(event):
             return
         
-        fname = self.get_sync_name(event.src_path)
+        raw_name = event.src_path.replace("\\", "/")
+        fname = self.get_sync_name(raw_name)
+        print(raw_name)
+        print(fname)
         
         transactions = load_transactions(self.database_path)
-        transaction = {"timestamp": time.time(), "type": "created", "md5": compute_md5(event.src_path)}
+        transaction = {"timestamp": time.time(), "type": "created", "md5": compute_md5(raw_name)}
         transactions[fname] = transaction
         save_transactions(self.database_path, transactions)
         
@@ -115,7 +120,8 @@ class FileChangeHandler(FileSystemEventHandler):
         if self.is_excluded(event):
             return
         
-        fname = self.get_sync_name(event.src_path)
+        raw_name = event.src_path.replace("\\", "/")
+        fname = self.get_sync_name(raw_name)
         
         transactions = load_transactions(self.database_path)
         transaction = {"timestamp": time.time(), "type": "deleted"}
@@ -131,10 +137,12 @@ class FileChangeHandler(FileSystemEventHandler):
             return
         if self.is_excluded(event):
             return
-        fname = self.get_sync_name(event.src_path)
+        
+        raw_name = event.src_path.replace("\\", "/")
+        fname = self.get_sync_name(raw_name)
         
         transactions = load_transactions(self.database_path)
-        transaction = {"timestamp": time.time(), "type": "modified", "md5": compute_md5(event.src_path)}
+        transaction = {"timestamp": time.time(), "type": "modified", "md5": compute_md5(raw_name)}
         transactions[fname] = transaction
         save_transactions(self.database_path, transactions)
         
@@ -143,22 +151,22 @@ class FileChangeHandler(FileSystemEventHandler):
         print("\rModified: {:<128} (len watches: {})".format(fname, len(transactions)), end="")
 
     def is_excluded(self, event):
-        if event.src_path.endswith("Neues Textdokument.txt"):
+        raw_name = event.src_path.replace("\\", "/")
+        if raw_name.endswith("Neues Textdokument.txt"):
             return True
 
         # Filter by exclude pattern.
         for pattern in self.exclude_patterns:
-            pattern = pattern.replace("\\", os.sep)
-            pattern = pattern.replace("/", os.sep)
+            pattern = pattern.replace("\\", "/")
             if pattern.endswith(os.sep):
-                if pattern in event.src_path:
+                if pattern in raw_name:
                     return True
-                if event.is_directory and event.src_path.endswith(pattern[:-1]):
+                if event.is_directory and raw_name.endswith(pattern[:-1]):
                     return True
             else:
-                if event.src_path.split(os.sep)[-1].startswith(pattern):
+                if raw_name.split(os.sep)[-1].startswith(pattern):
                     return True
-                if event.src_path.endswith(pattern):
+                if raw_name.endswith(pattern):
                     return True
 
         return False
@@ -206,8 +214,12 @@ def on_retrieve_file(state, entanglement, data: Dict):
     transactions = load_transactions(state["handler"].database_path)
     transactions[data["fname"]] = data["transaction"]
     save_transactions(state["handler"].database_path, transactions)
-    with open(disk_name, "wb") as f:
-        f.write(base64.b64decode(data["data"].encode("utf-8")))
+    
+    if not data["transaction"]["type"] == "deleted":
+        with open(disk_name, "wb") as f:
+            f.write(base64.b64decode(data["data"].encode("utf-8")))
+    else:
+        os.remove(disk_name)
 
     state["open_tasks"] -= 1
 
@@ -222,14 +234,23 @@ def retrieve_file(state, entanglement, fname):
     data["transaction"] = transactions[fname]
     data["fname"] = fname
     
-    with open(disk_name, "rb") as f:
-        data["data"] = base64.b64encode(f.read()).decode("utf-8")
+    if not data["transaction"]["type"] == "deleted":
+        with open(disk_name, "rb") as f:
+            data["data"] = base64.b64encode(f.read()).decode("utf-8")
     entanglement.remote_fun("on_retrieve_file")(transactions)
 
 def on_get_database(state, entanglement, transactions: Dict):
     print("on_get_database: {}".format(transactions))
     transactions_local = load_transactions(state["handler"].database_path)
     
+    for key in transactions:
+        if key not in transactions_local:
+            entanglement.remote_fun("retrieve_file")(key)
+        else:
+            local_time = transactions_local[key]["timestamp"]
+            remote_time = transactions[key]["timestamp"]
+            if remote_time > local_time:
+                entanglement.remote_fun("retrieve_file")(key)
     # TODO compare database against local one
     # And request files that are more up to date by others
     # delete files that were deleted on remote.
@@ -237,7 +258,7 @@ def on_get_database(state, entanglement, transactions: Dict):
     state["open_tasks"] -= 1
 
 def get_database(state, entanglement):
-    print("get_database")
+    #print("get_database")
     transactions = load_transactions(state["handler"].database_path)
     entanglement.remote_fun("on_sync_get_database")(transactions)
     
@@ -256,25 +277,27 @@ def format_len(size):
 
 def on_entangle(entanglement):
     state = {}
+    state["handler"] = _HANDLER
     entanglement.on_sync_retrieve_file = partial(on_retrieve_file, state, entanglement)
     entanglement.on_sync_get_database = partial(on_get_database, state, entanglement)
     entanglement.sync_get_database = partial(get_database, state, entanglement)
-    print("Waiting 5 seconds for server to be ready.")
+    print("Waiting 5 seconds for readiness.")
     time.sleep(5)
     print("Connected. Syncing...")
     while True:
-        print("Issuing update of local database...")
+        #print("Issuing update of local database...")
         state["open_tasks"] = 1
         entanglement.remote_fun("sync_get_database")()
         while state["open_tasks"] > 0:
             time.sleep(1)
 
-        print("Waiting 5 seconds before next sync round.")
+        #print("Waiting 5 seconds before next sync round.")
         time.sleep(5)
 
 
 # Cell: 8
 def run_sync():
+    global _HANDLER
     # Load user_data
     if "AppData" in os.environ: # Windows
         config_file = os.path.join(os.environ["AppData"], "p2p_sync", "config.json")
@@ -303,6 +326,7 @@ def run_sync():
     handler.database_path = database_path
     handler.mappings = config["sync_to_local_folder"]
     initial_scan(handler)
+    _HANDLER = handler
     for path in handler.mappings.values():
         observer.schedule(handler, path=path, recursive=True)
     observer.start()
@@ -311,7 +335,7 @@ def run_sync():
     # 1. Try connecting to all known hosts
     clients = []
     for hosts in config["known_hosts"]:
-        clients.append(Client(host=hosts["host"], port=hosts["port"], password=hosts["password"], user=hosts["user"], callback=on_entangle, blocking=False))
+        clients.append(Client(host=hosts["host"], port=hosts["port"], password=hosts["password"], user=hosts["user"], callback=on_entangle, blocking=False, run_reactor=False))
     # 2. Start own server
     listen(host=config["host"], port=config["port"], callback=on_entangle, users=config["users"])
     
