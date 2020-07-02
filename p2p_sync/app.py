@@ -240,8 +240,7 @@ def retrieve_file(state, entanglement, fname):
     if not data["transaction"]["type"] == "deleted":
         with open(disk_name, "rb") as f:
             data["data"] = base64.encodestring(f.read()).decode("ascii")
-        print(data["data"])
-    entanglement.remote_fun("on_retrieve_file")(data)
+    entanglement.remote_fun("on_sync_retrieve_file")(data)
 
 def on_get_database(state, entanglement, transactions: Dict):
     print("on_get_database: {}".format(transactions))
