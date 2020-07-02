@@ -105,8 +105,6 @@ class FileChangeHandler(FileSystemEventHandler):
         
         raw_name = event.src_path.replace("\\", "/")
         fname = self.get_sync_name(raw_name)
-        print(raw_name)
-        print(fname)
         
         transactions = load_transactions(self.database_path)
         md5 = compute_md5(raw_name)
@@ -214,7 +212,6 @@ def initial_scan(handler):
 
 # Cell: 7
 def on_retrieve_file(state, entanglement, data: Dict):
-    print("on_retrieve_file: {}".format(data))
     namespace, name = data["fname"].split(":")
     disk_name = os.path.join(state["handler"].mappings[namespace], name).replace("/", os.sep)
     transactions = load_transactions(state["handler"].database_path)
@@ -229,12 +226,12 @@ def on_retrieve_file(state, entanglement, data: Dict):
             f.write(base64.decodestring(data["data"].encode("ascii")))
     else:
         print("Deleting: {}".format(disk_name))
-        os.remove(disk_name)
+        if os.path.exists(disk_name):
+            os.remove(disk_name)
 
     state["open_tasks"] -= 1
 
 def retrieve_file(state, entanglement, fname):
-    print("retrieve_file: {}".format(fname))
     data = {}
     
     namespace, name = fname.split(":")
@@ -250,7 +247,6 @@ def retrieve_file(state, entanglement, fname):
     entanglement.remote_fun("on_sync_retrieve_file")(data)
 
 def on_get_database(state, entanglement, transactions: Dict):
-    print("on_get_database: {}".format(transactions))
     transactions_local = load_transactions(state["handler"].database_path)
     
     for key in transactions:
@@ -266,9 +262,6 @@ def on_get_database(state, entanglement, transactions: Dict):
             if remote_time > local_time:
                 state["open_tasks"] += 1
                 entanglement.remote_fun("sync_retrieve_file")(key)
-    # TODO compare database against local one
-    # And request files that are more up to date by others
-    # delete files that were deleted on remote.
     
     state["open_tasks"] -= 1
 
