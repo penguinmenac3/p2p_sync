@@ -162,7 +162,7 @@ class FileChangeHandler(FileSystemEventHandler):
         # Filter by exclude pattern.
         for pattern in self.exclude_patterns:
             pattern = pattern.replace("\\", "/")
-            if pattern.endswith(os.sep):
+            if pattern.endswith("/"):
                 if pattern in raw_name:
                     return True
                 if event.is_directory and raw_name.endswith(pattern[:-1]):
