@@ -168,7 +168,7 @@ class FileChangeHandler(FileSystemEventHandler):
                 if event.is_directory and raw_name.endswith(pattern[:-1]):
                     return True
             else:
-                if raw_name.split(os.sep)[-1].startswith(pattern):
+                if raw_name.split("/")[-1].startswith(pattern):
                     return True
                 if raw_name.endswith(pattern):
                     return True
